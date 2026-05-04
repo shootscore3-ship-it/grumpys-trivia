@@ -1,4 +1,8 @@
-const API_URL = "https://opentdb.com/api.php?amount=5&type=multiple&difficulty=easy";
+const TRIVIA_URLS = [
+  "https://opentdb.com/api.php?amount=2&type=multiple&difficulty=easy&category=9",  // General Knowledge
+  "https://opentdb.com/api.php?amount=2&type=multiple&difficulty=easy&category=21", // Sports
+  "https://opentdb.com/api.php?amount=1&type=multiple&difficulty=easy&category=23"  // History
+];
 
 const JOIN_SECONDS = 20;
 const QUESTION_SECONDS = 20;
@@ -22,14 +26,6 @@ let questions = [];
 let currentQuestionIndex = 0;
 let correctAnswerIndex = 0;
 let roundId = Date.now().toString();
-
-const fakeAllTimeLeaders = [
-  ["Grumpy Mike", 12800],
-  ["Trivia Sarah", 11450],
-  ["Table 7", 10600],
-  ["Big Brain Bob", 9800],
-  ["St. Boni Crew", 9100]
-];
 
 function setPhase(phase) {
   screenEl.classList.remove("phase-join", "phase-question", "phase-reveal", "phase-final");
@@ -110,6 +106,10 @@ function renderLeaderboard(playersObj = {}) {
 }
 
 function makeBoardList(players) {
+  if (!players || players.length === 0) {
+    return `<li><span>No players yet</span><strong>0</strong></li>`;
+  }
+
   return players
     .map(player => `<li><span>${player.name}</span><strong>${(player.score || 0).toLocaleString()}</strong></li>`)
     .join("");
@@ -123,8 +123,9 @@ async function scoreQuestion() {
   Object.entries(players).forEach(([playerId, player]) => {
     const answer = player.answers?.[currentQuestionIndex];
 
-    if (answer && answer.choiceIndex === correctAnswerIndex) {
+    if (answer && answer.choiceIndex === correctAnswerIndex && !answer.scored) {
       updates[`players/${playerId}/score`] = (player.score || 0) + 100;
+      updates[`players/${playerId}/answers/${currentQuestionIndex}/scored`] = true;
     }
   });
 
@@ -222,10 +223,8 @@ async function showFinalScreen() {
   phaseLabel.textContent = "Final";
   categoryEl.textContent = "Final Scoreboard";
   questionEl.textContent = `${winnerName} wins this round!`;
-  messageEl.textContent = "All-time leaders will become real once we save long-term scores.";
+  messageEl.textContent = "All-time leaders will be added once we save long-term scores.";
   roundProgressEl.textContent = "Round complete";
-
-  const allTimePlayers = fakeAllTimeLeaders.map(([name, score]) => ({ name, score }));
 
   answersEl.innerHTML = `
     <div class="final-board round-board">
@@ -239,7 +238,9 @@ async function showFinalScreen() {
     <div class="final-board all-time-board">
       <h3>All-Time Leaders</h3>
       <ol>
-        ${makeBoardList(allTimePlayers)}
+        <li><span>Coming Soon</span><strong>—</strong></li>
+        <li><span>Real scores will save here</span><strong>—</strong></li>
+        <li><span>after the next update</span><strong>—</strong></li>
       </ol>
     </div>
   `;
@@ -252,20 +253,23 @@ async function showFinalScreen() {
 
 async function loadQuestions() {
   try {
-    const response = await fetch(API_URL);
-    const data = await response.json();
+    const questionGroups = await Promise.all(
+      TRIVIA_URLS.map(url => fetch(url).then(response => response.json()))
+    );
 
-    if (!data.results || data.results.length < 5) {
+    questions = questionGroups.flatMap(group => group.results || []);
+
+    if (questions.length < 5) {
       throw new Error("Not enough trivia questions returned.");
     }
 
-    questions = data.results;
+    questions = shuffle(questions).slice(0, 5);
   } catch (error) {
     console.error(error);
 
     questions = [
       {
-        category: "General Trivia",
+        category: "General Knowledge",
         question: "What planet is known as the Red Planet?",
         correct_answer: "Mars",
         incorrect_answers: ["Venus", "Jupiter", "Saturn"]
@@ -277,22 +281,22 @@ async function loadQuestions() {
         incorrect_answers: ["3", "7", "10"]
       },
       {
-        category: "Entertainment",
-        question: "What movie features a character named Buzz Lightyear?",
-        correct_answer: "Toy Story",
-        incorrect_answers: ["Shrek", "Cars", "Finding Nemo"]
+        category: "History",
+        question: "Who was the first President of the United States?",
+        correct_answer: "George Washington",
+        incorrect_answers: ["Abraham Lincoln", "Thomas Jefferson", "John Adams"]
       },
       {
-        category: "Geography",
-        question: "Which country is directly north of the United States?",
-        correct_answer: "Canada",
-        incorrect_answers: ["Mexico", "Brazil", "France"]
+        category: "General Knowledge",
+        question: "How many days are in a leap year?",
+        correct_answer: "366",
+        incorrect_answers: ["365", "364", "367"]
       },
       {
-        category: "Food & Drink",
-        question: "What drink is traditionally made with ginger beer, lime, and vodka?",
-        correct_answer: "Moscow Mule",
-        incorrect_answers: ["Margarita", "Old Fashioned", "Mojito"]
+        category: "Sports",
+        question: "In baseball, how many strikes make an out?",
+        correct_answer: "3",
+        incorrect_answers: ["2", "4", "5"]
       }
     ];
   }
