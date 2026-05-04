@@ -117,12 +117,17 @@ async function joinGame() {
   localStorage.setItem("grumpysTriviaNameKey", playerNameKey);
   localStorage.setItem("grumpysTriviaPin", savedPin);
 
+  const gameSnap = await gameRef.once("value");
+  const game = gameSnap.val() || {};
+
   await gameRef.child(`players/${playerId}`).set({
     id: playerId,
     name: playerName,
     nameKey: playerNameKey,
     score: 0,
     joinedAt: Date.now(),
+    joinedRoundId: game.roundId || null,
+    joinedPhase: game.phase || "unknown",
     answers: {}
   });
 
@@ -198,6 +203,34 @@ function renderChoices(game) {
   });
 }
 
+function getJoinStatusMessage(game, player) {
+  if (!game || !game.phase) {
+    return "Waiting for the TV screen to start the game.";
+  }
+
+  if (!player) {
+    return "Joining game...";
+  }
+
+  if (game.phase === "join") {
+    return "You are in. Get ready — the round is about to start.";
+  }
+
+  if (game.phase === "question") {
+    return "You joined during the round. Answer this question now!";
+  }
+
+  if (game.phase === "reveal") {
+    return "You joined between questions. Wait for the next question to answer.";
+  }
+
+  if (game.phase === "final") {
+    return "This round just ended. Stay here for the next round.";
+  }
+
+  return "Waiting for the next question...";
+}
+
 async function renderGame(game) {
   currentGame = game || {};
   timerText.textContent = formatTime(currentGame.timer || 0);
@@ -210,7 +243,7 @@ async function renderGame(game) {
   scoreText.textContent = currentPlayer?.score || 0;
 
   if (!currentGame.phase || currentGame.phase === "join") {
-    statusText.textContent = "You are in. Waiting for the round to start...";
+    statusText.textContent = getJoinStatusMessage(currentGame, currentPlayer);
     categoryText.textContent = "Get Ready";
     questionText.textContent = "Watch the TV for the round countdown.";
     choicesEl.innerHTML = "";
@@ -222,7 +255,7 @@ async function renderGame(game) {
 
     statusText.textContent = existingAnswer
       ? "Answer submitted. Waiting for reveal..."
-      : "Answer now!";
+      : getJoinStatusMessage(currentGame, currentPlayer);
 
     categoryText.textContent = currentGame.category || "Trivia";
     questionText.textContent = currentGame.question || "Question loading...";
@@ -231,7 +264,7 @@ async function renderGame(game) {
   }
 
   if (currentGame.phase === "reveal") {
-    statusText.textContent = "Answer revealed. Check the TV leaderboard.";
+    statusText.textContent = getJoinStatusMessage(currentGame, currentPlayer);
     categoryText.textContent = currentGame.category || "Trivia";
     questionText.textContent = currentGame.question || "Answer revealed.";
     renderChoices(currentGame);
@@ -239,7 +272,7 @@ async function renderGame(game) {
   }
 
   if (currentGame.phase === "final") {
-    statusText.textContent = "Round complete!";
+    statusText.textContent = getJoinStatusMessage(currentGame, currentPlayer);
     categoryText.textContent = "Final";
     questionText.textContent = "Check the TV for the winner.";
     choicesEl.innerHTML = "";
