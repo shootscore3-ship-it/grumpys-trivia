@@ -1,7 +1,7 @@
 const TRIVIA_URLS = [
-  "https://opentdb.com/api.php?amount=2&type=multiple&difficulty=easy&category=9",  // General Knowledge
-  "https://opentdb.com/api.php?amount=2&type=multiple&difficulty=easy&category=21", // Sports
-  "https://opentdb.com/api.php?amount=1&type=multiple&difficulty=easy&category=23"  // History
+  "https://opentdb.com/api.php?amount=2&type=multiple&difficulty=easy&category=9",
+  "https://opentdb.com/api.php?amount=2&type=multiple&difficulty=easy&category=21",
+  "https://opentdb.com/api.php?amount=1&type=multiple&difficulty=easy&category=23"
 ];
 
 const JOIN_SECONDS = 20;
@@ -11,6 +11,7 @@ const FINAL_SECONDS = 40;
 
 const GAME_ID = "main";
 const gameRef = db.ref(`games/${GAME_ID}`);
+const claimedNamesRef = db.ref("claimedNames");
 
 const screenEl = document.querySelector(".screen");
 const phaseLabel = document.getElementById("phaseLabel");
@@ -111,8 +112,49 @@ function makeBoardList(players) {
   }
 
   return players
-    .map(player => `<li><span>${player.name}</span><strong>${(player.score || 0).toLocaleString()}</strong></li>`)
+    .map(player => `<li><span>${player.name || player.displayName}</span><strong>${(player.score || player.totalScore || 0).toLocaleString()}</strong></li>`)
     .join("");
+}
+
+async function getAllTimeLeaders() {
+  const snap = await claimedNamesRef.once("value");
+  const profiles = Object.values(snap.val() || {});
+
+  return profiles
+    .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
+    .slice(0, 5);
+}
+
+async function addRoundScoresToAllTime(roundLeaders) {
+  const updates = {};
+
+  roundLeaders.forEach((player, index) => {
+    if (!player.nameKey) return;
+
+    updates[`${player.nameKey}/displayName`] = player.name;
+    updates[`${player.nameKey}/lastPlayed`] = Date.now();
+  });
+
+  await Promise.all(
+    roundLeaders.map(async (player, index) => {
+      if (!player.nameKey) return;
+
+      const profileSnap = await claimedNamesRef.child(player.nameKey).once("value");
+      const profile = profileSnap.val();
+
+      if (!profile) return;
+
+      const bonusWin = index === 0 ? 1 : 0;
+
+      await claimedNamesRef.child(player.nameKey).update({
+        displayName: player.name,
+        totalScore: (profile.totalScore || 0) + (player.score || 0),
+        gamesPlayed: (profile.gamesPlayed || 0) + 1,
+        wins: (profile.wins || 0) + bonusWin,
+        lastPlayed: Date.now()
+      });
+    })
+  );
 }
 
 async function scoreQuestion() {
@@ -218,12 +260,16 @@ async function showFinalScreen() {
 
   const snap = await gameRef.child("players").once("value");
   const roundLeaders = getSortedPlayers(snap.val() || {}).slice(0, 5);
+
+  await addRoundScoresToAllTime(roundLeaders);
+
+  const allTimeLeaders = await getAllTimeLeaders();
   const winnerName = roundLeaders[0]?.name || "Nobody yet";
 
   phaseLabel.textContent = "Final";
   categoryEl.textContent = "Final Scoreboard";
   questionEl.textContent = `${winnerName} wins this round!`;
-  messageEl.textContent = "All-time leaders will be added once we save long-term scores.";
+  messageEl.textContent = "All-time leaderboard saves by nickname + PIN.";
   roundProgressEl.textContent = "Round complete";
 
   answersEl.innerHTML = `
@@ -238,9 +284,7 @@ async function showFinalScreen() {
     <div class="final-board all-time-board">
       <h3>All-Time Leaders</h3>
       <ol>
-        <li><span>Coming Soon</span><strong>—</strong></li>
-        <li><span>Real scores will save here</span><strong>—</strong></li>
-        <li><span>after the next update</span><strong>—</strong></li>
+        ${makeBoardList(allTimeLeaders)}
       </ol>
     </div>
   `;
