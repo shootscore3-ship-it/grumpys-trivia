@@ -5,6 +5,7 @@ const QUESTION_SECONDS = 20;
 const REVEAL_SECONDS = 8;
 const FINAL_SECONDS = 40;
 
+const screenEl = document.querySelector(".screen");
 const phaseLabel = document.getElementById("phaseLabel");
 const timerEl = document.getElementById("timer");
 const categoryEl = document.getElementById("category");
@@ -34,6 +35,11 @@ const fakeLeaderboardSets = [
     ["Table 7", 500], ["Sarah", 400], ["Mike", 300], ["Lisa", 300], ["Jake", 200]
   ]
 ];
+
+function setPhase(phase) {
+  screenEl.classList.remove("phase-join", "phase-question", "phase-reveal", "phase-final");
+  screenEl.classList.add(`phase-${phase}`);
+}
 
 function decodeHtml(text) {
   const textarea = document.createElement("textarea");
@@ -81,6 +87,8 @@ function updateLeaderboard(index) {
 }
 
 function showJoinScreen() {
+  setPhase("join");
+
   phaseLabel.textContent = "Join Now";
   categoryEl.textContent = "Grumpy's Trivia";
   questionEl.textContent = "Scan the QR code and get ready to play!";
@@ -96,6 +104,8 @@ function showJoinScreen() {
 }
 
 function showQuestion(questionData, index) {
+  setPhase("question");
+
   phaseLabel.textContent = "Question";
   currentQuestionIndex = index;
 
@@ -117,8 +127,10 @@ function showQuestion(questionData, index) {
 }
 
 function showAnswerReveal(index) {
+  setPhase("reveal");
+
   phaseLabel.textContent = "Answer";
-  messageEl.textContent = "Current Top 5 leaderboard is updated.";
+  messageEl.textContent = "Correct answer revealed • Current Top 5 updated";
   roundProgressEl.textContent = `Answer reveal ${index + 1} of ${questions.length}`;
 
   document.querySelectorAll(".answer").forEach((answer, i) => {
@@ -133,6 +145,8 @@ function showAnswerReveal(index) {
 }
 
 function showFinalScreen() {
+  setPhase("final");
+
   phaseLabel.textContent = "Final";
   categoryEl.textContent = "Winner";
   questionEl.textContent = "Table 7 wins this round!";
@@ -145,6 +159,7 @@ function showFinalScreen() {
     <div class="answer">4th Place: Lisa</div>
   `;
 
+  updateLeaderboard(4);
   roundProgressEl.textContent = "Round complete";
 }
 
