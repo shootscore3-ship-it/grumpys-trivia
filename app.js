@@ -1,5 +1,10 @@
 const API_URL = "https://opentdb.com/api.php?amount=5&type=multiple&difficulty=easy";
 
+const JOIN_SECONDS = 20;
+const QUESTION_SECONDS = 20;
+const REVEAL_SECONDS = 8;
+const FINAL_SECONDS = 40;
+
 const phaseLabel = document.getElementById("phaseLabel");
 const timerEl = document.getElementById("timer");
 const categoryEl = document.getElementById("category");
@@ -193,18 +198,18 @@ async function loadQuestions() {
 
 async function runRound() {
   showJoinScreen();
-  await startCountdown(15);
+  await startCountdown(JOIN_SECONDS);
 
   for (let i = 0; i < questions.length; i++) {
     showQuestion(questions[i], i);
-    await startCountdown(20);
+    await startCountdown(QUESTION_SECONDS);
 
     showAnswerReveal(i);
-    await startCountdown(8);
+    await startCountdown(REVEAL_SECONDS);
   }
 
   showFinalScreen();
-  await startCountdown(40);
+  await startCountdown(FINAL_SECONDS);
 
   phaseLabel.textContent = "Next Round";
   timerEl.textContent = "0:00";
