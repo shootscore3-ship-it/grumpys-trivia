@@ -16,6 +16,13 @@ const choicesEl = document.getElementById("choices");
 let playerId = localStorage.getItem("grumpysTriviaPlayerId");
 let playerName = localStorage.getItem("grumpysTriviaPlayerName");
 let currentGame = null;
+let currentPlayer = null;
+
+const BLOCKED_WORDS = [
+  "fuck", "shit", "bitch", "asshole", "dick", "pussy", "cunt",
+  "nigger", "nigga", "fag", "faggot", "retard", "whore", "slut",
+  "cum", "porn", "sex", "hitler", "nazi"
+];
 
 function formatTime(seconds) {
   const mins = Math.floor(seconds / 60);
@@ -27,16 +34,35 @@ function makePlayerId() {
   return `player_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-async function joinGame() {
-  const name = nameInput.value.trim();
+function cleanName(name) {
+  return name
+    .trim()
+    .replace(/[^a-zA-Z0-9 _.-]/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 18);
+}
 
-  if (!name) {
+function isNameAllowed(name) {
+  const lowered = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  return !BLOCKED_WORDS.some(word => lowered.includes(word));
+}
+
+async function joinGame() {
+  const cleanedName = cleanName(nameInput.value);
+
+  if (!cleanedName) {
     alert("Enter a nickname first.");
     return;
   }
 
+  if (!isNameAllowed(cleanedName)) {
+    alert("Pick a different nickname.");
+    return;
+  }
+
   playerId = playerId || makePlayerId();
-  playerName = name;
+  playerName = cleanedName;
 
   localStorage.setItem("grumpysTriviaPlayerId", playerId);
   localStorage.setItem("grumpysTriviaPlayerName", playerName);
@@ -54,17 +80,25 @@ async function joinGame() {
 }
 
 async function submitAnswer(choiceIndex) {
-  if (!currentGame || currentGame.phase !== "question") return;
+  if (!currentGame || currentGame.phase !== "question" || !playerId) return;
 
   const questionIndex = currentGame.questionIndex;
+  const existingAnswer = currentPlayer?.answers?.[questionIndex];
+
+  if (existingAnswer) {
+    statusText.textContent = "Answer already submitted. You cannot change it.";
+    return;
+  }
 
   await gameRef.child(`players/${playerId}/answers/${questionIndex}`).set({
     choiceIndex,
-    answeredAt: Date.now()
+    answeredAt: Date.now(),
+    scored: false
   });
 
   document.querySelectorAll(".choice").forEach((btn, index) => {
     btn.disabled = true;
+
     if (index === choiceIndex) {
       btn.classList.add("selected");
     }
@@ -76,12 +110,33 @@ async function submitAnswer(choiceIndex) {
 function renderChoices(game) {
   choicesEl.innerHTML = "";
 
-  if (!game.choices || game.phase !== "question") return;
+  if (!game.choices) return;
+
+  const questionIndex = game.questionIndex;
+  const existingAnswer = currentPlayer?.answers?.[questionIndex];
+  const selectedIndex = existingAnswer?.choiceIndex;
 
   game.choices.forEach((choice, index) => {
     const btn = document.createElement("button");
     btn.className = "choice";
     btn.textContent = `${String.fromCharCode(65 + index)}. ${choice}`;
+
+    if (selectedIndex === index) {
+      btn.classList.add("selected");
+    }
+
+    if (existingAnswer || game.phase !== "question") {
+      btn.disabled = true;
+    }
+
+    if (game.phase === "reveal") {
+      if (index === game.correctAnswerIndex) {
+        btn.classList.add("correct");
+      } else if (selectedIndex === index && selectedIndex !== game.correctAnswerIndex) {
+        btn.classList.add("wrong");
+      }
+    }
+
     btn.onclick = () => submitAnswer(index);
     choicesEl.appendChild(btn);
   });
@@ -95,9 +150,9 @@ async function renderGame(game) {
   if (!playerId) return;
 
   const playerSnap = await gameRef.child(`players/${playerId}`).once("value");
-  const player = playerSnap.val();
+  currentPlayer = playerSnap.val();
 
-  scoreText.textContent = player?.score || 0;
+  scoreText.textContent = currentPlayer?.score || 0;
 
   if (!currentGame.phase || currentGame.phase === "join") {
     statusText.textContent = "You are in. Waiting for the round to start...";
@@ -108,7 +163,12 @@ async function renderGame(game) {
   }
 
   if (currentGame.phase === "question") {
-    statusText.textContent = "Answer now!";
+    const existingAnswer = currentPlayer?.answers?.[currentGame.questionIndex];
+
+    statusText.textContent = existingAnswer
+      ? "Answer submitted. Waiting for reveal..."
+      : "Answer now!";
+
     categoryText.textContent = currentGame.category || "Trivia";
     questionText.textContent = currentGame.question || "Question loading...";
     renderChoices(currentGame);
@@ -119,20 +179,7 @@ async function renderGame(game) {
     statusText.textContent = "Answer revealed. Check the TV leaderboard.";
     categoryText.textContent = currentGame.category || "Trivia";
     questionText.textContent = currentGame.question || "Answer revealed.";
-
-    renderChoices({
-      ...currentGame,
-      phase: "question"
-    });
-
-    document.querySelectorAll(".choice").forEach((btn, index) => {
-      btn.disabled = true;
-
-      if (index === currentGame.correctAnswerIndex) {
-        btn.classList.add("correct");
-      }
-    });
-
+    renderChoices(currentGame);
     return;
   }
 
