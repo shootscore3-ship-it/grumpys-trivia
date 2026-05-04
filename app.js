@@ -1,4 +1,4 @@
-const API_URL = "https://opentdb.com/api.php?amount=4&type=multiple&difficulty=easy";
+const API_URL = "https://opentdb.com/api.php?amount=5&type=multiple&difficulty=easy";
 
 const phaseLabel = document.getElementById("phaseLabel");
 const timerEl = document.getElementById("timer");
@@ -24,6 +24,9 @@ const fakeLeaderboardSets = [
   ],
   [
     ["Table 7", 400], ["Sarah", 300], ["Mike", 300], ["Lisa", 200], ["Jake", 100]
+  ],
+  [
+    ["Table 7", 500], ["Sarah", 400], ["Mike", 300], ["Lisa", 300], ["Jake", 200]
   ]
 ];
 
@@ -65,7 +68,7 @@ function startCountdown(seconds) {
 
 function updateLeaderboard(index) {
   const leaderboardList = document.getElementById("leaderboardList");
-  const set = fakeLeaderboardSets[index] || fakeLeaderboardSets[0];
+  const set = fakeLeaderboardSets[index] || fakeLeaderboardSets[fakeLeaderboardSets.length - 1];
 
   leaderboardList.innerHTML = set
     .map(([name, score]) => `<li><span>${name}</span><strong>${score}</strong></li>`)
@@ -76,7 +79,7 @@ function showJoinScreen() {
   phaseLabel.textContent = "Join Now";
   categoryEl.textContent = "Grumpy's Trivia";
   questionEl.textContent = "Scan the QR code and get ready to play!";
-  messageEl.textContent = "A new 4-question round is starting.";
+  messageEl.textContent = "A new 5-question round is starting.";
   roundProgressEl.textContent = "Round starts soon";
 
   answersEl.innerHTML = `
@@ -134,7 +137,7 @@ function showFinalScreen() {
     <div class="answer correct">1st Place: Table 7</div>
     <div class="answer">2nd Place: Sarah</div>
     <div class="answer">3rd Place: Mike</div>
-    <div class="answer">Thanks for playing!</div>
+    <div class="answer">4th Place: Lisa</div>
   `;
 
   roundProgressEl.textContent = "Round complete";
@@ -145,7 +148,7 @@ async function loadQuestions() {
     const response = await fetch(API_URL);
     const data = await response.json();
 
-    if (!data.results || data.results.length < 4) {
+    if (!data.results || data.results.length < 5) {
       throw new Error("Not enough trivia questions returned.");
     }
 
@@ -177,6 +180,12 @@ async function loadQuestions() {
         question: "Which country is directly north of the United States?",
         correct_answer: "Canada",
         incorrect_answers: ["Mexico", "Brazil", "France"]
+      },
+      {
+        category: "Food & Drink",
+        question: "What drink is traditionally made with ginger beer, lime, and vodka?",
+        correct_answer: "Moscow Mule",
+        incorrect_answers: ["Margarita", "Old Fashioned", "Mojito"]
       }
     ];
   }
@@ -184,18 +193,18 @@ async function loadQuestions() {
 
 async function runRound() {
   showJoinScreen();
-  await startCountdown(20);
+  await startCountdown(15);
 
   for (let i = 0; i < questions.length; i++) {
     showQuestion(questions[i], i);
-    await startCountdown(30);
+    await startCountdown(20);
 
     showAnswerReveal(i);
-    await startCountdown(10);
+    await startCountdown(8);
   }
 
   showFinalScreen();
-  await startCountdown(35);
+  await startCountdown(40);
 
   phaseLabel.textContent = "Next Round";
   timerEl.textContent = "0:00";
