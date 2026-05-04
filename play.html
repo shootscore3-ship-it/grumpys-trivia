@@ -10,11 +10,18 @@
   <main class="phone">
     <section id="joinView" class="card">
       <h1>Grumpy's Trivia</h1>
-      <p>Enter a nickname to join the round.</p>
+      <p>
+        Enter a nickname and 4-digit PIN.
+        If the name is new, it will be saved.
+        If the name already exists, you need the correct PIN.
+      </p>
 
       <input id="nameInput" maxlength="18" placeholder="Nickname" />
+      <input id="pinInput" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="4-digit PIN" />
+
       <button id="joinBtn">Join Game</button>
 
+      <div id="joinError" class="small"></div>
       <div class="small">Keep this page open while you play.</div>
     </section>
 
