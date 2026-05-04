@@ -1,10 +1,13 @@
 const GAME_ID = "main";
 const gameRef = db.ref(`games/${GAME_ID}`);
+const claimedNamesRef = db.ref("claimedNames");
 
 const joinView = document.getElementById("joinView");
 const gameView = document.getElementById("gameView");
 const nameInput = document.getElementById("nameInput");
+const pinInput = document.getElementById("pinInput");
 const joinBtn = document.getElementById("joinBtn");
+const joinError = document.getElementById("joinError");
 
 const scoreText = document.getElementById("scoreText");
 const timerText = document.getElementById("timerText");
@@ -15,6 +18,8 @@ const choicesEl = document.getElementById("choices");
 
 let playerId = localStorage.getItem("grumpysTriviaPlayerId");
 let playerName = localStorage.getItem("grumpysTriviaPlayerName");
+let playerNameKey = localStorage.getItem("grumpysTriviaNameKey");
+let savedPin = localStorage.getItem("grumpysTriviaPin");
 let currentGame = null;
 let currentPlayer = null;
 
@@ -30,10 +35,6 @@ function formatTime(seconds) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-function makePlayerId() {
-  return `player_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-}
-
 function cleanName(name) {
   return name
     .trim()
@@ -42,37 +43,92 @@ function cleanName(name) {
     .slice(0, 18);
 }
 
+function makeNameKey(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function isNameAllowed(name) {
   const lowered = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-
   return !BLOCKED_WORDS.some(word => lowered.includes(word));
 }
 
-async function joinGame() {
-  const cleanedName = cleanName(nameInput.value);
+function isPinValid(pin) {
+  return /^[0-9]{4}$/.test(pin);
+}
 
-  if (!cleanedName) {
-    alert("Enter a nickname first.");
+function setJoinError(message) {
+  joinError.textContent = message;
+  joinError.style.color = message ? "#ffb3b3" : "#bbb";
+}
+
+async function joinGame() {
+  setJoinError("");
+
+  const cleanedName = cleanName(nameInput.value);
+  const nameKey = makeNameKey(cleanedName);
+  const pin = pinInput.value.trim();
+
+  if (!cleanedName || nameKey.length < 3) {
+    setJoinError("Enter a nickname with at least 3 letters/numbers.");
     return;
   }
 
   if (!isNameAllowed(cleanedName)) {
-    alert("Pick a different nickname.");
+    setJoinError("Pick a different nickname.");
     return;
   }
 
-  playerId = playerId || makePlayerId();
+  if (!isPinValid(pin)) {
+    setJoinError("Enter a 4-digit PIN.");
+    return;
+  }
+
+  const nameSnap = await claimedNamesRef.child(nameKey).once("value");
+  const existingProfile = nameSnap.val();
+
+  if (existingProfile && existingProfile.pin !== pin) {
+    setJoinError("That name is already taken. Use the correct PIN or pick a different name.");
+    return;
+  }
+
+  if (existingProfile) {
+    playerId = existingProfile.playerId;
+  } else {
+    playerId = `player_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+    await claimedNamesRef.child(nameKey).set({
+      playerId,
+      displayName: cleanedName,
+      pin,
+      totalScore: 0,
+      gamesPlayed: 0,
+      wins: 0,
+      createdAt: Date.now(),
+      lastPlayed: Date.now()
+    });
+  }
+
   playerName = cleanedName;
+  playerNameKey = nameKey;
+  savedPin = pin;
 
   localStorage.setItem("grumpysTriviaPlayerId", playerId);
   localStorage.setItem("grumpysTriviaPlayerName", playerName);
+  localStorage.setItem("grumpysTriviaNameKey", playerNameKey);
+  localStorage.setItem("grumpysTriviaPin", savedPin);
 
   await gameRef.child(`players/${playerId}`).set({
     id: playerId,
     name: playerName,
+    nameKey: playerNameKey,
     score: 0,
     joinedAt: Date.now(),
     answers: {}
+  });
+
+  await claimedNamesRef.child(nameKey).update({
+    displayName: cleanedName,
+    lastPlayed: Date.now()
   });
 
   joinView.classList.add("hidden");
@@ -144,7 +200,6 @@ function renderChoices(game) {
 
 async function renderGame(game) {
   currentGame = game || {};
-
   timerText.textContent = formatTime(currentGame.timer || 0);
 
   if (!playerId) return;
@@ -193,9 +248,8 @@ async function renderGame(game) {
 
 joinBtn.addEventListener("click", joinGame);
 
-if (playerName) {
-  nameInput.value = playerName;
-}
+if (playerName) nameInput.value = playerName;
+if (savedPin) pinInput.value = savedPin;
 
 gameRef.on("value", snap => {
   renderGame(snap.val());
