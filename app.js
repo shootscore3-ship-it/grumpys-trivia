@@ -12,6 +12,7 @@ const FINAL_SECONDS = 40;
 const GAME_ID = "main";
 const gameRef = db.ref(`games/${GAME_ID}`);
 const claimedNamesRef = db.ref("claimedNames");
+const savedRoundsRef = db.ref("savedRounds");
 
 const screenEl = document.querySelector(".screen");
 const phaseLabel = document.getElementById("phaseLabel");
@@ -57,8 +58,16 @@ function getPlayUrl() {
 }
 
 function setQrCode() {
-  const playUrl = encodeURIComponent(getPlayUrl());
-  qrCodeEl.innerHTML = `<img alt="Scan to play" src="https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${playUrl}">`;
+  const playUrl = getPlayUrl();
+  const encodedPlayUrl = encodeURIComponent(playUrl);
+
+  qrCodeEl.innerHTML = `
+    <img 
+      alt="Scan to play" 
+      src="https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=12&data=${encodedPlayUrl}"
+      style="width:100%;height:100%;object-fit:contain;border-radius:14px;"
+    >
+  `;
 }
 
 function startCountdown(seconds) {
@@ -108,53 +117,75 @@ function renderLeaderboard(playersObj = {}) {
 
 function makeBoardList(players) {
   if (!players || players.length === 0) {
-    return `<li><span>No players yet</span><strong>0</strong></li>`;
+    return `<li><span>No scores yet</span><strong>0</strong></li>`;
   }
 
   return players
-    .map(player => `<li><span>${player.name || player.displayName}</span><strong>${(player.score || player.totalScore || 0).toLocaleString()}</strong></li>`)
+    .map(player => {
+      const name = player.name || player.displayName || "Player";
+      const score = player.score ?? player.totalScore ?? 0;
+      return `<li><span>${name}</span><strong>${score.toLocaleString()}</strong></li>`;
+    })
     .join("");
 }
 
 async function getAllTimeLeaders() {
   const snap = await claimedNamesRef.once("value");
-  const profiles = Object.values(snap.val() || {});
+  const profilesObj = snap.val() || {};
+
+  const profiles = Object.entries(profilesObj).map(([nameKey, profile]) => ({
+    nameKey,
+    name: profile.displayName || nameKey,
+    score: profile.totalScore || 0,
+    totalScore: profile.totalScore || 0,
+    gamesPlayed: profile.gamesPlayed || 0,
+    wins: profile.wins || 0
+  }));
 
   return profiles
+    .filter(profile => profile.totalScore > 0)
     .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
     .slice(0, 5);
 }
 
 async function addRoundScoresToAllTime(roundLeaders) {
-  const updates = {};
+  const savedRoundSnap = await savedRoundsRef.child(roundId).once("value");
 
-  roundLeaders.forEach((player, index) => {
-    if (!player.nameKey) return;
+  if (savedRoundSnap.exists()) {
+    console.warn("This round was already saved. Skipping all-time update.");
+    return;
+  }
 
-    updates[`${player.nameKey}/displayName`] = player.name;
-    updates[`${player.nameKey}/lastPlayed`] = Date.now();
+  for (let i = 0; i < roundLeaders.length; i++) {
+    const player = roundLeaders[i];
+
+    if (!player.nameKey) {
+      console.warn("Skipping all-time score because player has no nameKey:", player);
+      continue;
+    }
+
+    const profileRef = claimedNamesRef.child(player.nameKey);
+    const profileSnap = await profileRef.once("value");
+    const profile = profileSnap.val();
+
+    if (!profile) {
+      console.warn("Skipping all-time score because claimed profile was not found:", player);
+      continue;
+    }
+
+    await profileRef.update({
+      displayName: player.name,
+      totalScore: (profile.totalScore || 0) + (player.score || 0),
+      gamesPlayed: (profile.gamesPlayed || 0) + 1,
+      wins: (profile.wins || 0) + (i === 0 ? 1 : 0),
+      lastPlayed: Date.now()
+    });
+  }
+
+  await savedRoundsRef.child(roundId).set({
+    savedAt: Date.now(),
+    playerCount: roundLeaders.length
   });
-
-  await Promise.all(
-    roundLeaders.map(async (player, index) => {
-      if (!player.nameKey) return;
-
-      const profileSnap = await claimedNamesRef.child(player.nameKey).once("value");
-      const profile = profileSnap.val();
-
-      if (!profile) return;
-
-      const bonusWin = index === 0 ? 1 : 0;
-
-      await claimedNamesRef.child(player.nameKey).update({
-        displayName: player.name,
-        totalScore: (profile.totalScore || 0) + (player.score || 0),
-        gamesPlayed: (profile.gamesPlayed || 0) + 1,
-        wins: (profile.wins || 0) + bonusWin,
-        lastPlayed: Date.now()
-      });
-    })
-  );
 }
 
 async function scoreQuestion() {
@@ -221,13 +252,15 @@ async function showQuestion(questionData, index) {
     .join("");
 
   await gameRef.update({
+    roundId,
     phase: "question",
     questionIndex: index,
     category: decodeHtml(questionData.category),
     question: decodeHtml(questionData.question),
     choices,
     correctAnswerIndex: null,
-    timer: QUESTION_SECONDS
+    timer: QUESTION_SECONDS,
+    finalSaved: false
   });
 }
 
@@ -249,6 +282,7 @@ async function showAnswerReveal(index) {
   await scoreQuestion();
 
   await gameRef.update({
+    roundId,
     phase: "reveal",
     correctAnswerIndex,
     timer: REVEAL_SECONDS
@@ -290,8 +324,10 @@ async function showFinalScreen() {
   `;
 
   await gameRef.update({
+    roundId,
     phase: "final",
-    timer: FINAL_SECONDS
+    timer: FINAL_SECONDS,
+    finalSaved: true
   });
 }
 
@@ -353,7 +389,8 @@ async function runRound() {
     roundId,
     phase: "join",
     timer: JOIN_SECONDS,
-    players: {}
+    players: {},
+    finalSaved: false
   });
 
   showJoinScreen();
