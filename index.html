@@ -37,18 +37,14 @@
 
       <aside class="side-panel">
         <div class="qr-box">
-          <div class="qr-placeholder">QR</div>
+          <div id="qrCode" class="qr-placeholder">QR</div>
           <div class="qr-text">Scan to Play</div>
         </div>
 
         <div class="leaderboard">
           <h2>Top 5</h2>
           <ol id="leaderboardList">
-            <li><span>Mike</span><strong>400</strong></li>
-            <li><span>Sarah</span><strong>300</strong></li>
-            <li><span>Table 7</span><strong>300</strong></li>
-            <li><span>Jake</span><strong>200</strong></li>
-            <li><span>Lisa</span><strong>100</strong></li>
+            <li><span>Waiting...</span><strong>0</strong></li>
           </ol>
         </div>
       </aside>
@@ -60,6 +56,9 @@
     </footer>
   </main>
 
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
