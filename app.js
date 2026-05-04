@@ -5,6 +5,9 @@ const QUESTION_SECONDS = 20;
 const REVEAL_SECONDS = 8;
 const FINAL_SECONDS = 40;
 
+const GAME_ID = "main";
+const gameRef = db.ref(`games/${GAME_ID}`);
+
 const screenEl = document.querySelector(".screen");
 const phaseLabel = document.getElementById("phaseLabel");
 const timerEl = document.getElementById("timer");
@@ -13,28 +16,12 @@ const questionEl = document.getElementById("question");
 const answersEl = document.getElementById("answers");
 const messageEl = document.getElementById("message");
 const roundProgressEl = document.getElementById("roundProgress");
+const qrCodeEl = document.getElementById("qrCode");
 
 let questions = [];
 let currentQuestionIndex = 0;
 let correctAnswerIndex = 0;
-
-const fakeLeaderboardSets = [
-  [
-    ["Mike", 100], ["Sarah", 100], ["Table 7", 0], ["Jake", 0], ["Lisa", 0]
-  ],
-  [
-    ["Sarah", 200], ["Mike", 100], ["Jake", 100], ["Table 7", 100], ["Lisa", 0]
-  ],
-  [
-    ["Sarah", 300], ["Table 7", 200], ["Mike", 200], ["Lisa", 100], ["Jake", 100]
-  ],
-  [
-    ["Table 7", 400], ["Sarah", 300], ["Mike", 300], ["Lisa", 200], ["Jake", 100]
-  ],
-  [
-    ["Table 7", 500], ["Sarah", 400], ["Mike", 300], ["Lisa", 300], ["Jake", 200]
-  ]
-];
+let roundId = Date.now().toString();
 
 const fakeAllTimeLeaders = [
   ["Grumpy Mike", 12800],
@@ -68,14 +55,27 @@ function formatTime(seconds) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+function getPlayUrl() {
+  return `${window.location.origin}${window.location.pathname.replace("index.html", "")}play.html`;
+}
+
+function setQrCode() {
+  const playUrl = encodeURIComponent(getPlayUrl());
+  qrCodeEl.innerHTML = `<img alt="Scan to play" src="https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${playUrl}">`;
+}
+
 function startCountdown(seconds) {
   let remaining = seconds;
   timerEl.textContent = formatTime(remaining);
 
   return new Promise(resolve => {
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       remaining--;
       timerEl.textContent = formatTime(Math.max(remaining, 0));
+
+      await gameRef.update({
+        timer: Math.max(remaining, 0)
+      });
 
       if (remaining <= 0) {
         clearInterval(interval);
@@ -85,19 +85,55 @@ function startCountdown(seconds) {
   });
 }
 
-function updateLeaderboard(index) {
-  const leaderboardList = document.getElementById("leaderboardList");
-  const set = fakeLeaderboardSets[index] || fakeLeaderboardSets[fakeLeaderboardSets.length - 1];
+function getSortedPlayers(playersObj = {}) {
+  return Object.values(playersObj)
+    .sort((a, b) => {
+      if ((b.score || 0) !== (a.score || 0)) {
+        return (b.score || 0) - (a.score || 0);
+      }
+      return (a.name || "").localeCompare(b.name || "");
+    });
+}
 
-  leaderboardList.innerHTML = set
-    .map(([name, score]) => `<li><span>${name}</span><strong>${score}</strong></li>`)
+function renderLeaderboard(playersObj = {}) {
+  const players = getSortedPlayers(playersObj).slice(0, 5);
+  const leaderboardList = document.getElementById("leaderboardList");
+
+  if (players.length === 0) {
+    leaderboardList.innerHTML = `<li><span>Waiting...</span><strong>0</strong></li>`;
+    return;
+  }
+
+  leaderboardList.innerHTML = players
+    .map(player => `<li><span>${player.name}</span><strong>${player.score || 0}</strong></li>`)
     .join("");
 }
 
 function makeBoardList(players) {
   return players
-    .map(([name, score]) => `<li><span>${name}</span><strong>${score.toLocaleString()}</strong></li>`)
+    .map(player => `<li><span>${player.name}</span><strong>${(player.score || 0).toLocaleString()}</strong></li>`)
     .join("");
+}
+
+async function scoreQuestion() {
+  const snap = await gameRef.child("players").once("value");
+  const players = snap.val() || {};
+  const updates = {};
+
+  Object.entries(players).forEach(([playerId, player]) => {
+    const answer = player.answers?.[currentQuestionIndex];
+
+    if (answer && answer.choiceIndex === correctAnswerIndex) {
+      updates[`players/${playerId}/score`] = (player.score || 0) + 100;
+    }
+  });
+
+  if (Object.keys(updates).length > 0) {
+    await gameRef.update(updates);
+  }
+
+  const updatedSnap = await gameRef.child("players").once("value");
+  renderLeaderboard(updatedSnap.val() || {});
 }
 
 function showJoinScreen() {
@@ -116,10 +152,10 @@ function showJoinScreen() {
     <div class="answer">Winner shown at the end</div>
   `;
 
-  updateLeaderboard(0);
+  renderLeaderboard({});
 }
 
-function showQuestion(questionData, index) {
+async function showQuestion(questionData, index) {
   setPhase("question");
 
   phaseLabel.textContent = "Question";
@@ -140,9 +176,19 @@ function showQuestion(questionData, index) {
   answersEl.innerHTML = choices
     .map((choice, i) => `<div class="answer" data-index="${i}">${String.fromCharCode(65 + i)}. ${choice}</div>`)
     .join("");
+
+  await gameRef.update({
+    phase: "question",
+    questionIndex: index,
+    category: decodeHtml(questionData.category),
+    question: decodeHtml(questionData.question),
+    choices,
+    correctAnswerIndex: null,
+    timer: QUESTION_SECONDS
+  });
 }
 
-function showAnswerReveal(index) {
+async function showAnswerReveal(index) {
   setPhase("reveal");
 
   phaseLabel.textContent = "Answer";
@@ -157,20 +203,29 @@ function showAnswerReveal(index) {
     }
   });
 
-  updateLeaderboard(index);
+  await scoreQuestion();
+
+  await gameRef.update({
+    phase: "reveal",
+    correctAnswerIndex,
+    timer: REVEAL_SECONDS
+  });
 }
 
-function showFinalScreen() {
+async function showFinalScreen() {
   setPhase("final");
 
-  const roundLeaders = fakeLeaderboardSets[fakeLeaderboardSets.length - 1];
-  const winnerName = roundLeaders[0][0];
+  const snap = await gameRef.child("players").once("value");
+  const roundLeaders = getSortedPlayers(snap.val() || {}).slice(0, 5);
+  const winnerName = roundLeaders[0]?.name || "Nobody yet";
 
   phaseLabel.textContent = "Final";
   categoryEl.textContent = "Final Scoreboard";
   questionEl.textContent = `${winnerName} wins this round!`;
-  messageEl.textContent = "All-time leaders will become real once Firebase scoring is connected.";
+  messageEl.textContent = "All-time leaders will become real once we save long-term scores.";
   roundProgressEl.textContent = "Round complete";
+
+  const allTimePlayers = fakeAllTimeLeaders.map(([name, score]) => ({ name, score }));
 
   answersEl.innerHTML = `
     <div class="final-board round-board">
@@ -184,12 +239,15 @@ function showFinalScreen() {
     <div class="final-board all-time-board">
       <h3>All-Time Leaders</h3>
       <ol>
-        ${makeBoardList(fakeAllTimeLeaders)}
+        ${makeBoardList(allTimePlayers)}
       </ol>
     </div>
   `;
 
-  updateLeaderboard(4);
+  await gameRef.update({
+    phase: "final",
+    timer: FINAL_SECONDS
+  });
 }
 
 async function loadQuestions() {
@@ -241,25 +299,39 @@ async function loadQuestions() {
 }
 
 async function runRound() {
+  roundId = Date.now().toString();
+
+  await gameRef.set({
+    roundId,
+    phase: "join",
+    timer: JOIN_SECONDS,
+    players: {}
+  });
+
   showJoinScreen();
   await startCountdown(JOIN_SECONDS);
 
   for (let i = 0; i < questions.length; i++) {
-    showQuestion(questions[i], i);
+    await showQuestion(questions[i], i);
     await startCountdown(QUESTION_SECONDS);
 
-    showAnswerReveal(i);
+    await showAnswerReveal(i);
     await startCountdown(REVEAL_SECONDS);
   }
 
-  showFinalScreen();
+  await showFinalScreen();
   await startCountdown(FINAL_SECONDS);
 
   phaseLabel.textContent = "Next Round";
   timerEl.textContent = "0:00";
 }
 
+gameRef.child("players").on("value", snap => {
+  renderLeaderboard(snap.val() || {});
+});
+
 async function init() {
+  setQrCode();
   await loadQuestions();
   runRound();
 }
