@@ -36,6 +36,14 @@ const fakeLeaderboardSets = [
   ]
 ];
 
+const fakeAllTimeLeaders = [
+  ["Grumpy Mike", 12800],
+  ["Trivia Sarah", 11450],
+  ["Table 7", 10600],
+  ["Big Brain Bob", 9800],
+  ["St. Boni Crew", 9100]
+];
+
 function setPhase(phase) {
   screenEl.classList.remove("phase-join", "phase-question", "phase-reveal", "phase-final");
   screenEl.classList.add(`phase-${phase}`);
@@ -86,6 +94,12 @@ function updateLeaderboard(index) {
     .join("");
 }
 
+function makeBoardList(players) {
+  return players
+    .map(([name, score]) => `<li><span>${name}</span><strong>${score.toLocaleString()}</strong></li>`)
+    .join("");
+}
+
 function showJoinScreen() {
   setPhase("join");
 
@@ -101,6 +115,8 @@ function showJoinScreen() {
     <div class="answer">Play from your phone</div>
     <div class="answer">Winner shown at the end</div>
   `;
+
+  updateLeaderboard(0);
 }
 
 function showQuestion(questionData, index) {
@@ -131,7 +147,7 @@ function showAnswerReveal(index) {
 
   phaseLabel.textContent = "Answer";
   messageEl.textContent = "Correct answer revealed • Current Top 5 updated";
-  roundProgressEl.textContent = `Answer reveal ${index + 1} of ${questions.length}`;
+  roundProgressEl.textContent = `Top 5 after Question ${index + 1}`;
 
   document.querySelectorAll(".answer").forEach((answer, i) => {
     if (i === correctAnswerIndex) {
@@ -147,20 +163,33 @@ function showAnswerReveal(index) {
 function showFinalScreen() {
   setPhase("final");
 
+  const roundLeaders = fakeLeaderboardSets[fakeLeaderboardSets.length - 1];
+  const winnerName = roundLeaders[0][0];
+
   phaseLabel.textContent = "Final";
-  categoryEl.textContent = "Winner";
-  questionEl.textContent = "Table 7 wins this round!";
-  messageEl.textContent = "Next round starts when the trivia slide comes back.";
+  categoryEl.textContent = "Final Scoreboard";
+  questionEl.textContent = `${winnerName} wins this round!`;
+  messageEl.textContent = "All-time leaders will become real once Firebase scoring is connected.";
+  roundProgressEl.textContent = "Round complete";
 
   answersEl.innerHTML = `
-    <div class="answer correct">1st Place: Table 7</div>
-    <div class="answer">2nd Place: Sarah</div>
-    <div class="answer">3rd Place: Mike</div>
-    <div class="answer">4th Place: Lisa</div>
+    <div class="final-board round-board">
+      <div class="winner-banner">🏆 This Round Winner: ${winnerName}</div>
+      <h3>Final Top 5</h3>
+      <ol>
+        ${makeBoardList(roundLeaders)}
+      </ol>
+    </div>
+
+    <div class="final-board all-time-board">
+      <h3>All-Time Leaders</h3>
+      <ol>
+        ${makeBoardList(fakeAllTimeLeaders)}
+      </ol>
+    </div>
   `;
 
   updateLeaderboard(4);
-  roundProgressEl.textContent = "Round complete";
 }
 
 async function loadQuestions() {
