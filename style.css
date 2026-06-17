@@ -565,3 +565,60 @@ h1 {
     box-shadow: 0 0 60px rgba(242,201,76,0.65);
   }
 }
+/* Stronger fix for long TV questions */
+.question {
+  overflow: visible !important;
+  text-overflow: unset !important;
+  white-space: normal !important;
+  display: block !important;
+  -webkit-line-clamp: unset !important;
+  -webkit-box-orient: unset !important;
+  max-height: none !important;
+}
+
+.question.long-question {
+  font-size: 38px !important;
+  line-height: 1.06 !important;
+}
+
+.question.extra-long-question {
+  font-size: 30px !important;
+  line-height: 1.05 !important;
+}
+
+.question.super-long-question {
+  font-size: 24px !important;
+  line-height: 1.04 !important;
+}
+
+.phase-question .question-card {
+  overflow: visible !important;
+}
+
+.phase-question .answers {
+  margin-top: 10px !important;
+}
+
+.phase-question .answer {
+  font-size: 23px !important;
+  line-height: 1.08 !important;
+  min-height: 62px !important;
+  padding: 14px 18px !important;
+}
+
+.phase-question .question.extra-long-question ~ .answers .answer,
+.phase-question .question.super-long-question ~ .answers .answer {
+  font-size: 20px !important;
+  min-height: 56px !important;
+  padding: 12px 16px !important;
+}
+
+.phase-question .tv-points-box {
+  margin-top: 10px !important;
+  padding: 12px !important;
+}
+
+.phase-question .message {
+  font-size: 20px !important;
+  margin-top: 10px !important;
+}
