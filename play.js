@@ -141,6 +141,63 @@ function normalizeNameForFilter(name) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+function isHardBlockedName(name) {
+  const raw = String(name || "").toLowerCase();
+
+  // Removes spaces, dots, hyphens, apostrophes, underscores, etc.
+  // Example: "T-r.u m p" becomes "trump"
+  const compact = raw.replace(/[^a-z0-9]/g, "");
+
+  const compactNumbers = raw.replace(/[^0-9]/g, "");
+
+  const hardBlocked = [
+    "trump",
+    "biden",
+    "obama",
+    "maga",
+
+    "daddy",
+    "mommy",
+    "mama",
+    "papi",
+
+    "fart",
+    "farter",
+    "poop",
+    "pooper",
+    "pee",
+    "piss",
+    "butt",
+    "booty",
+
+    "admin",
+    "owner",
+    "manager",
+    "staff",
+    "host",
+    "grumpys",
+    "grumpy",
+
+    "fuck",
+    "shit",
+    "bitch",
+    "asshole",
+    "dick",
+    "pussy",
+    "cunt",
+    "sex",
+    "porn",
+    "hitler",
+    "nazi"
+  ];
+
+  if (compactNumbers.includes("69") || compactNumbers.includes("420")) {
+    return true;
+  }
+
+  return hardBlocked.some(word => compact.includes(word));
+}
+
 function isNameAllowed(name) {
   const cleaned = cleanName(name);
   const key = makeNameKey(cleaned);
@@ -246,7 +303,8 @@ function setJoinError(message) {
 async function joinGame() {
   setJoinError("");
 
-  const cleanedName = cleanName(nameInput.value);
+  const rawName = nameInput.value;
+  const cleanedName = cleanName(rawName);
   const nameKey = makeNameKey(cleanedName);
   const pin = pinInput.value.trim();
 
@@ -255,7 +313,7 @@ async function joinGame() {
     return;
   }
 
-  if (!isNameAllowed(cleanedName)) {
+  if (isHardBlockedName(rawName) || isHardBlockedName(cleanedName) || !isNameAllowed(cleanedName)) {
     setJoinError("Pick a different nickname. Use a normal first name or first name and last initial.");
     return;
   }
