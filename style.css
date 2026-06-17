@@ -565,7 +565,8 @@ h1 {
     box-shadow: 0 0 60px rgba(242,201,76,0.65);
   }
 }
-/* Stronger fix for long TV questions */
+/* Strong TV question fix — stops long questions from cutting off with ... */
+.phase-question .question,
 .question {
   overflow: visible !important;
   text-overflow: unset !important;
@@ -576,49 +577,33 @@ h1 {
   max-height: none !important;
 }
 
-.question.long-question {
-  font-size: 38px !important;
+/* Make TV question text smaller so long questions fit */
+.phase-question .question {
+  font-size: 36px !important;
   line-height: 1.06 !important;
+  margin-bottom: 12px !important;
 }
 
-.question.extra-long-question {
-  font-size: 30px !important;
-  line-height: 1.05 !important;
-}
-
-.question.super-long-question {
-  font-size: 24px !important;
-  line-height: 1.04 !important;
-}
-
-.phase-question .question-card {
-  overflow: visible !important;
-}
-
+/* Make answer boxes a little tighter so the question has room */
 .phase-question .answers {
-  margin-top: 10px !important;
+  margin-top: 8px !important;
+  gap: 12px !important;
 }
 
 .phase-question .answer {
-  font-size: 23px !important;
+  font-size: 21px !important;
   line-height: 1.08 !important;
-  min-height: 62px !important;
-  padding: 14px 18px !important;
-}
-
-.phase-question .question.extra-long-question ~ .answers .answer,
-.phase-question .question.super-long-question ~ .answers .answer {
-  font-size: 20px !important;
-  min-height: 56px !important;
+  min-height: 58px !important;
   padding: 12px 16px !important;
 }
 
+/* Tighten the points box and bottom message too */
 .phase-question .tv-points-box {
-  margin-top: 10px !important;
-  padding: 12px !important;
+  margin-top: 8px !important;
+  padding: 10px 12px !important;
 }
 
 .phase-question .message {
   font-size: 20px !important;
-  margin-top: 10px !important;
+  margin-top: 8px !important;
 }
